@@ -4,7 +4,20 @@
 
 ## About
 
-`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com, eQSL.cc, Club Log, HRDLog.net, HamQTH, and World Radio League are currently supported.
+`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. Integrations are available for QRZ.com, eQSL.cc, Club Log, HRDLog.net, HamQTH, and World Radio League.
+
+## Integration status
+
+| Service | Status | Notes |
+| --- | --- | --- |
+| QRZ.com | **Verified** | Confirmed working |
+| eQSL.cc | **Verified** | Confirmed working |
+| World Radio League | **Verified** | Confirmed working against the published API contract |
+| Club Log | **Unverified** | Best-effort implementation; current official API documentation has not been reviewed |
+| HRDLog.net | **Unverified** | Best-effort implementation; current official API documentation has not been reviewed |
+| HamQTH | **Unverified** | Best-effort implementation; current official API documentation has not been reviewed |
+
+Do not rely on an unverified integration as the only copy of a contact. Its request format may need adjustment after review of the current official API documentation or testing with a live account.
 
 ## Requirements
 
@@ -57,13 +70,19 @@ that `--eqsl-username` (or `EQSL_USERNAME`) is set.
 
 ### Club Log
 
+> **Unverified:** this is a best-effort integration and has not been validated against current official API documentation or a live account.
+
 Enable Club Log with `--enable-clublog`. Supply the account email, password, and application API key with `--clublog-email`, `--clublog-password`, and `--clublog-api-key`, or their corresponding environment variables. The application API key is distinct from the account password.
 
 ### HRDLog.net
 
+> **Unverified:** this is a best-effort integration and has not been validated against current official API documentation or a live account.
+
 Enable HRDLog.net with `--enable-hrdlog`. Supply the upload code shown in the HRDLog.net account settings with `--hrdlog-code` or `HRDLOG_CODE`.
 
 ### HamQTH
+
+> **Unverified:** this is a best-effort integration and has not been validated against current official API documentation or a live account.
 
 Enable HamQTH with `--enable-hamqth`. Supply the account username and password with `--hamqth-username` and `--hamqth-password`, or `HAMQTH_USERNAME` and `HAMQTH_PASSWORD`.
 

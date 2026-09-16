@@ -65,7 +65,7 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertEqual(message, "1 out of 1 records added")
 
     #===========================================================================
-    # Verify each form-based real-time API receives its documented credentials
+    # Verify each best-effort form integration encodes its configured credentials
     #===========================================================================
     def test_additional_logger_requests(self):
         cases = [
