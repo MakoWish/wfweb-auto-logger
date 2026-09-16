@@ -125,9 +125,15 @@ sudo install -m 0644 systemd/wfweb-auto-logger.service \
   /etc/systemd/system/wfweb-auto-logger.service
 ```
 
-Create `/etc/wfweb-auto-logger.env` with the destinations to enable and their
-credentials. This QRZ-only example can be extended with any options and
-environment variables from the table above:
+Create the configuration directory and `/etc/wfweb-auto-logger/config.env`
+with the destinations to enable and their credentials. This QRZ-only example
+can be extended with any options and environment variables from the table
+above:
+
+```console
+sudo install -d -m 0755 -o root -g root /etc/wfweb-auto-logger
+sudoedit /etc/wfweb-auto-logger/config.env
+```
 
 ```ini
 LOGGER_ARGS=--enable-qrz
@@ -138,8 +144,8 @@ QRZ_API_KEY=your-qrz-key
 Protect the credentials, load the unit, and start it now and on future boots:
 
 ```console
-sudo chown root:root /etc/wfweb-auto-logger.env
-sudo chmod 0600 /etc/wfweb-auto-logger.env
+sudo chown root:root /etc/wfweb-auto-logger/config.env
+sudo chmod 0600 /etc/wfweb-auto-logger/config.env
 sudo systemctl daemon-reload
 sudo systemctl enable --now wfweb-auto-logger.service
 ```

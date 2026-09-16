@@ -8,7 +8,7 @@ Type=simple
 User=wfweb
 Group=wfweb
 Environment=HOME=/var/lib/wfweb
-EnvironmentFile=/etc/wfweb-auto-logger.env
+EnvironmentFile=/etc/wfweb-auto-logger/config.env
 ExecStart=/usr/local/bin/wfweb-auto-logger $LOGGER_ARGS
 Restart=on-failure
 RestartSec=30s
