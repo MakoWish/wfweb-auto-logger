@@ -69,7 +69,7 @@ Enable HamQTH with `--enable-hamqth`. Supply the account username and password w
 
 ### World Radio League
 
-Enable World Radio League with `--enable-wrl`. Supply a World Radio League API key with `--wrl-api-key` or `WRL_API_KEY`.
+Enable World Radio League with `--enable-wrl`. Generate an API key under **Integrations → Developer API**, then supply it with `--wrl-api-key` or `WRL_API_KEY`. By default, contacts go to the account's default logbook. To select one explicitly, use `--wrl-logbook-id` or `WRL_LOGBOOK_ID`. See the [World Radio League API documentation](https://worldradioleague.com/developer/#description/introduction) for account and logbook setup.
 
 ## Options
 
@@ -93,6 +93,7 @@ Enable World Radio League with `--enable-wrl`. Supply a World Radio League API k
 | `--hamqth-password PASSWORD` | `HAMQTH_PASSWORD` | HamQTH account password |
 | `--enable-wrl` | — | Upload to World Radio League |
 | `--wrl-api-key KEY` | `WRL_API_KEY` | World Radio League API key |
+| `--wrl-logbook-id UUID` | `WRL_LOGBOOK_ID` | Optional World Radio League destination logbook |
 | `--log-file PATH` | — | WFWEB JSONL log path |
 | `--state-file PATH` | — | Upload progress state path |
 | `--failed-file PATH` | — | Rejected or invalid record output path |
