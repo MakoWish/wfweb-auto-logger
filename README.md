@@ -71,6 +71,8 @@ Enable HamQTH with `--enable-hamqth`. Supply the account username and password w
 
 Enable World Radio League with `--enable-wrl`. Generate an API key under **Integrations → Developer API**, then supply it with `--wrl-api-key` or `WRL_API_KEY`. By default, contacts go to the account's default logbook. To select one explicitly, use `--wrl-logbook-id` or `WRL_LOGBOOK_ID`. See the [World Radio League API documentation](https://worldradioleague.com/developer/#description/introduction) for account and logbook setup.
 
+With `--verbose`, the logger prints the contact JSON sent to World Radio League. WRL server and rate-limit errors remain pending for retry; when its response includes a request ID, the logger prints it so it can be supplied to WRL support.
+
 ## Options
 
 | Option | Environment variable | Description |

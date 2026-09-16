@@ -112,7 +112,8 @@ class AutoLoggerTests(unittest.TestCase):
     #===========================================================================
     def test_wrl_request_contains_contact_and_api_key(self):
         args = SimpleNamespace(station_callsign="W1AW", wrl_api_key="wrl-key",
-                               wrl_logbook_id="00000000-0000-0000-0000-000000000001")
+                               wrl_logbook_id="00000000-0000-0000-0000-000000000001",
+                               verbose=False)
         response = mock.MagicMock()
         response.read.return_value = (
             b'{"data":{"id":"qso-123","enrichment":"pending"},'
@@ -147,7 +148,7 @@ class AutoLoggerTests(unittest.TestCase):
     #===========================================================================
     def test_wrl_validation_error_is_rejected(self):
         args = SimpleNamespace(station_callsign="W1AW", wrl_api_key="wrl-key",
-                               wrl_logbook_id=None)
+                               wrl_logbook_id=None, verbose=False)
         body = (b'{"data":null,"meta":null,"error":'
                 b'{"code":"LOGBOOK_REQUIRED","message":"Choose a logbook."}}')
         error = module.urllib.error.HTTPError(
@@ -160,6 +161,27 @@ class AutoLoggerTests(unittest.TestCase):
             }, "unused")
         self.assertFalse(accepted)
         self.assertEqual(message, "LOGBOOK_REQUIRED: Choose a logbook.")
+
+    #===========================================================================
+    # Verify WRL server errors retain diagnostic details and remain retryable
+    #===========================================================================
+    def test_wrl_server_error_preserves_request_id_for_retry(self):
+        args = SimpleNamespace(station_callsign="W1AW", wrl_api_key="wrl-key",
+                               wrl_logbook_id=None, verbose=False)
+        body = (b'{"data":null,"meta":null,"error":{"code":"INTERNAL_ERROR",'
+                b'"message":"An unexpected error occurred.",'
+                b'"requestId":"379f8bce-f716-45d0-bbb8-c64193941183"}}')
+        error = module.urllib.error.HTTPError(
+            module.WRL_URL, 500, "Internal Server Error", {}, io.BytesIO(body)
+        )
+        with mock.patch.object(module.urllib.request, "urlopen", side_effect=error):
+            with self.assertRaisesRegex(
+                    module.TransientUploadError,
+                    "INTERNAL_ERROR.*379f8bce-f716-45d0-bbb8-c64193941183"):
+                module.submit_wrl(args, {
+                    "call": "W1AW", "date": "20260916", "time": "1435",
+                    "freq": 14074000, "band": "20m", "mode": "FT8",
+                }, "unused")
 
     #===========================================================================
     # Verify network errors remain pending and are not recorded as rejections
