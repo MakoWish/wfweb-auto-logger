@@ -140,13 +140,14 @@ def submit_qrz(args, adif):
 # Submit one ADIF record to the eQSL.cc ADIF import endpoint
 #===============================================================================
 def submit_eqsl(args, adif):
-    # eQSL authenticates uploads with credentials in the ADIF header rather
-    # than an API key. QTHNickname is optional, but selects the desired profile.
+    # The eQSL real-time interface requires its service-specific eQSL_User and
+    # eQSL_Pswd field names. Generic USERID and PASSWORD fields are not accepted.
+    # QTHNickname is optional, but selects the desired station profile.
     header = "".join([
         adif_field("ADIF_VER", "3.1.0"),
         adif_field("PROGRAMID", "wfweb-auto-logger"),
-        adif_field("USERID", args.eqsl_username),
-        adif_field("PASSWORD", args.eqsl_password),
+        adif_field("eQSL_User", args.eqsl_username),
+        adif_field("eQSL_Pswd", args.eqsl_password),
         adif_field("QTHNickname", args.eqsl_qth_nickname),
         "<EOH>",
     ])

@@ -3,6 +3,7 @@ import importlib.util
 import pathlib
 import tempfile
 import unittest
+import urllib.parse
 from types import SimpleNamespace
 from unittest import mock
 
@@ -41,7 +42,7 @@ class AutoLoggerTests(unittest.TestCase):
     #===========================================================================
     def test_eqsl_request_contains_adif_credentials(self):
         args = SimpleNamespace(
-            eqsl_username="W1AW", eqsl_password="secret",
+            eqsl_username="W1AW", eqsl_password="AN~bL]adv=Q2bf",
             eqsl_qth_nickname="Home",
         )
         response = mock.MagicMock()
@@ -52,8 +53,13 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertTrue(accepted)
         url = open_url.call_args.args[0].full_url
         self.assertIn("ImportADIF.cfm?ADIFData=", url)
-        self.assertIn("USERID%3A4%3EW1AW", url)
-        self.assertIn("PASSWORD%3A6%3Esecret", url)
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+        upload = query["ADIFData"][0]
+        self.assertIn("<eQSL_User:4>W1AW", upload)
+        self.assertIn("<eQSL_Pswd:14>AN~bL]adv=Q2bf", upload)
+        self.assertIn("<QTHNickname:4>Home", upload)
+        self.assertNotIn("<USERID", upload)
+        self.assertNotIn("<PASSWORD", upload)
         self.assertEqual(message, "1 out of 1 records added")
 
     #===========================================================================

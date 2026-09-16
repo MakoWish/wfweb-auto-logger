@@ -43,6 +43,11 @@ Enable eQSL with `--enable-eqsl`. Unlike QRZ, eQSL's ADIF upload interface authe
 
 If the password contains shell metacharacters, quote it when passing it on the command line. Environment variables are preferable.
 
+The logger encodes these credentials as the `eQSL_User` and `eQSL_Pswd`
+fields required by eQSL's real-time ADIF interface. If eQSL reports
+`Missing eQSL_User`, verify that the installed logger contains eQSL support and
+that `--eqsl-username` (or `EQSL_USERNAME`) is set.
+
 ## Options
 
 | Option | Environment variable | Description |
