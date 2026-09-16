@@ -19,7 +19,15 @@ DEFAULT_STATE = Path("/var/lib/wfweb/.local/share/wfweb/wfweb/qrz-logger.state")
 DEFAULT_FAILED = Path("/var/lib/wfweb/.local/share/wfweb/wfweb/qrz-logger-failed.jsonl")
 QRZ_URL = "https://logbook.qrz.com/api"
 EQSL_URL = "https://www.eqsl.cc/qslcard/ImportADIF.cfm"
+HAMQTH_URL = "https://www.hamqth.com/qso_realtime.php"
+WRL_URL = "https://api.worldradioleague.com/v1/contacts"
 RETRY_SECONDS = 30
+
+
+# A service can use this to preserve a response body while asking the delivery
+# loop to retry rather than recording the QSO as permanently rejected.
+class TransientUploadError(Exception):
+    pass
 
 
 #===============================================================================
@@ -114,7 +122,7 @@ def qso_to_adif(qso, station_callsign):
 #===============================================================================
 # Submit one ADIF record to the QRZ.com Logbook API
 #===============================================================================
-def submit_qrz(args, adif):
+def submit_qrz(args, qso, adif):
     payload = urllib.parse.urlencode({
         "KEY": args.qrz_api_key, "ACTION": "INSERT", "ADIF": adif,
     }).encode("utf-8")
@@ -139,7 +147,7 @@ def submit_qrz(args, adif):
 #===============================================================================
 # Submit one ADIF record to the eQSL.cc ADIF import endpoint
 #===============================================================================
-def submit_eqsl(args, adif):
+def submit_eqsl(args, qso, adif):
     # The eQSL real-time interface requires its service-specific eQSL_User and
     # eQSL_Pswd field names. Generic USERID and PASSWORD fields are not accepted.
     # QTHNickname is optional, but selects the desired station profile.
@@ -166,6 +174,142 @@ def submit_eqsl(args, adif):
     if success:
         return True, "1 out of 1 records added"
     return False, "eQSL did not confirm the upload: " + " ".join(body.split())[:500]
+
+
+#===============================================================================
+# Submit one ADIF record to HamQTH's real-time upload API
+#===============================================================================
+def submit_hamqth(args, qso, adif):
+    if not qso.get("rstSent") or not qso.get("rstRcvd"):
+        return False, "HamQTH requires both sent and received signal reports"
+    mode, submode = normalize_mode(qso.get("mode"))
+    fields = [
+        adif_field("QSO_DATE", qso.get("date")),
+        adif_field("TIME_ON", qso.get("time")),
+        adif_field("CALL", str(qso.get("call", "")).strip().upper()),
+    ]
+    try:
+        freq_hz = int(qso.get("freq"))
+        if freq_hz > 0:
+            fields.append(adif_field(
+                "FREQ", f"{freq_hz / 1_000_000:.6f}".rstrip("0").rstrip(".")
+            ))
+    except (TypeError, ValueError):
+        pass
+    fields.extend([
+        adif_field("MODE", submode or mode),
+        adif_field("BAND", str(qso.get("band", "")).strip().upper()),
+        adif_field("RST_S", qso.get("rstSent")),
+        adif_field("RST_R", qso.get("rstRcvd")),
+        "<EOR>",
+    ])
+    hamqth_adif = "".join(fields)
+    payload = urllib.parse.urlencode({
+        "u": args.hamqth_username,
+        "p": args.hamqth_password,
+        "c": args.station_callsign,
+        "adif": hamqth_adif,
+        "prg": "wfweb-auto-logger",
+        "cmd": "insert",
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        HAMQTH_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": f"wfweb-auto-logger/2.0 ({args.station_callsign})",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        message = " ".join(body.split()) or exc.reason
+        if exc.code >= 500:
+            raise TransientUploadError(f"HTTP {exc.code}: {message}") from exc
+        return False, f"HTTP {exc.code}: {message}"
+    message = " ".join(body.split())
+    return True, message or "QSO OK"
+
+
+#===============================================================================
+# Submit one ADIF record to the World Radio League QSO API
+#===============================================================================
+def submit_wrl(args, qso, adif):
+    try:
+        freq = int(qso.get("freq")) / 1_000_000
+    except (TypeError, ValueError):
+        return False, "World Radio League requires a valid frequency"
+    mode, submode = normalize_mode(qso.get("mode"))
+    contact = {
+        "programId": "wfweb-auto-logger",
+        "call": str(qso.get("call", "")).strip().upper(),
+        "timestamp": {
+            "qsoDate": str(qso.get("date", "")).strip(),
+            "timeOn": str(qso.get("time", "")).strip(),
+        },
+        "freq": freq,
+        "band": str(qso.get("band", "")).strip().lower(),
+        "mode": submode or mode,
+        "stationCallsign": args.station_callsign.upper(),
+    }
+    optional_fields = {
+        "rstSent": "rstSent",
+        "rstRcvd": "rstRcvd",
+    }
+    for api_name, qso_name in optional_fields.items():
+        if qso.get(qso_name):
+            contact[api_name] = str(qso[qso_name])
+    if args.wrl_logbook_id:
+        contact["logbookId"] = args.wrl_logbook_id
+    payload = json.dumps(contact).encode("utf-8")
+    verbose(args, f"WRL request: {payload.decode('utf-8')}")
+    request = urllib.request.Request(
+        WRL_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": f"wfweb-auto-logger/2.0 ({args.station_callsign})",
+            "Authorization": f"Bearer {args.wrl_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        # Rate limits and server failures are transient and remain pending for
+        # retry. Preserve the documented error envelope and request id so a
+        # server-side failure can be reported to WRL support.
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            error = json.loads(body).get("error") or {}
+            message = error.get("code", f"HTTP {exc.code}")
+            if error.get("message"):
+                message += f": {error['message']}"
+            if error.get("hint"):
+                message += f" ({error['hint']})"
+            request_id = error.get("requestId") or exc.headers.get("X-Request-Id")
+            if request_id:
+                message += f" [requestId={request_id}]"
+            if (error.get("code") in ("INTERNAL_ERROR", "LOGBOOK_REQUIRED") and
+                    "destination logbook" in error.get("message", "").lower()):
+                message += ("; set --wrl-logbook-id/WRL_LOGBOOK_ID or choose a "
+                            "default under Integrations -> Developer API")
+        except (AttributeError, json.JSONDecodeError):
+            message = f"HTTP {exc.code}: {' '.join(body.split()) or exc.reason}"
+        if exc.code == 429 or exc.code >= 500:
+            raise TransientUploadError(message) from exc
+        return False, message
+    try:
+        result = json.loads(body)
+    except json.JSONDecodeError:
+        return False, "World Radio League returned invalid JSON"
+    if not isinstance(result, dict) or result.get("error"):
+        error = result.get("error") if isinstance(result, dict) else None
+        return False, str(error or "World Radio League returned an invalid response")
+    data = result.get("data") or {}
+    contact_id = data.get("id") if isinstance(data, dict) else None
+    return True, f"created contact {contact_id or 'unknown'}"
 
 
 #===============================================================================
@@ -230,6 +374,10 @@ def configured_loggers(args):
         loggers["qrz"] = submit_qrz
     if args.enable_eqsl:
         loggers["eqsl"] = submit_eqsl
+    if args.enable_hamqth:
+        loggers["hamqth"] = submit_hamqth
+    if args.enable_wrl:
+        loggers["wrl"] = submit_wrl
     return loggers
 
 
@@ -241,7 +389,10 @@ def process_for_logger(args, logger_name, submit, qso, adif):
         log(f"DRY RUN: not submitting to {logger_name.upper()}")
         return True
     try:
-        accepted, message = submit(args, adif)
+        accepted, message = submit(args, qso, adif)
+    except TransientUploadError as exc:
+        log(f"{logger_name.upper()} transient error: {exc}")
+        return False
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
         log(f"{logger_name.upper()} network error: {exc}")
         return False
@@ -361,17 +512,30 @@ def parse_args(argv=None):
     parser.add_argument("--eqsl-username", default=os.environ.get("EQSL_USERNAME"))
     parser.add_argument("--eqsl-password", default=os.environ.get("EQSL_PASSWORD"))
     parser.add_argument("--eqsl-qth-nickname", default=os.environ.get("EQSL_QTH_NICKNAME"))
+    parser.add_argument("--enable-hamqth", action="store_true")
+    parser.add_argument("--hamqth-username", default=os.environ.get("HAMQTH_USERNAME"))
+    parser.add_argument("--hamqth-password", default=os.environ.get("HAMQTH_PASSWORD"))
+    parser.add_argument("--enable-wrl", action="store_true")
+    parser.add_argument("--wrl-api-key", default=os.environ.get("WRL_API_KEY"))
+    parser.add_argument("--wrl-logbook-id", default=os.environ.get("WRL_LOGBOOK_ID"))
     args = parser.parse_args(argv)
     # Report all configuration errors together so they can be fixed at once.
     errors = []
-    if not args.enable_qrz and not args.enable_eqsl:
-        errors.append("enable at least one service with --enable-qrz and/or --enable-eqsl")
+    enabled = (args.enable_qrz, args.enable_eqsl,
+               args.enable_hamqth, args.enable_wrl)
+    if not any(enabled):
+        errors.append("enable at least one logging service")
     if not args.station_callsign:
         errors.append("supply --station-callsign or STATION_CALLSIGN")
     if args.enable_qrz and not args.qrz_api_key:
         errors.append("--enable-qrz requires --qrz-api-key or QRZ_API_KEY")
     if args.enable_eqsl and (not args.eqsl_username or not args.eqsl_password):
         errors.append("--enable-eqsl requires eQSL username and password")
+    if args.enable_hamqth and not all((args.hamqth_username,
+                                      args.hamqth_password)):
+        errors.append("--enable-hamqth requires username and password")
+    if args.enable_wrl and not args.wrl_api_key:
+        errors.append("--enable-wrl requires --wrl-api-key or WRL_API_KEY")
     if errors:
         parser.error("; ".join(errors))
     return args
