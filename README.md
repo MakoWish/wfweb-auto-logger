@@ -18,7 +18,7 @@
 ## Requirements
 
 - Python 3 (no third-party packages are required)
-- WFWEB QSO server-side logging (pending [adecarolis/wfweb/issues/109](https://github.com/adecarolis/wfweb/issues/109))
+- WFWEB server-side QSO logging (pending [adecarolis/wfweb/issues/109](https://github.com/adecarolis/wfweb/issues/109))
 - Credentials/API Keys for each logbook you enable
 
 ## Usage
