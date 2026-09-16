@@ -118,6 +118,8 @@ class AutoLoggerTests(unittest.TestCase):
                                return_value=response) as open_url:
             accepted, message = module.submit_wrl(args, "<CALL:6>KF0ZJT<EOR>")
         request = open_url.call_args.args[0]
+        self.assertEqual(request.full_url,
+                         "https://api.worldradioleague.com/v1/qsos")
         self.assertEqual(json.loads(request.data),
                          {"adif": "<CALL:6>KF0ZJT<EOR>"})
         self.assertEqual(request.get_header("Authorization"), "Bearer wrl-key")

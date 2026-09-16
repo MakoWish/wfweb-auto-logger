@@ -22,7 +22,7 @@ EQSL_URL = "https://www.eqsl.cc/qslcard/ImportADIF.cfm"
 CLUBLOG_URL = "https://clublog.org/realtime.php"
 HRDLOG_URL = "https://robot.hrdlog.net/NewEntry.aspx"
 HAMQTH_URL = "https://www.hamqth.com/qso_realtime.php"
-WRL_URL = "https://api.worldradioleague.com/v1/qso"
+WRL_URL = "https://api.worldradioleague.com/v1/qsos"
 RETRY_SECONDS = 30
 
 
