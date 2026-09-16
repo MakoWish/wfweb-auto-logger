@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | QRZ.com | **Verified** | Confirmed working |
 | eQSL.cc | **Verified** | Confirmed working |
-| World Radio League | **Verified** | Confirmed working ]
+| World Radio League | **Verified** | Confirmed working |
 | HamQTH | **Verified** | Confirmed workingg |
 
 ## Requirements
