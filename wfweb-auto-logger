@@ -19,6 +19,9 @@ DEFAULT_STATE = Path("/var/lib/wfweb/.local/share/wfweb/wfweb/qrz-logger.state")
 DEFAULT_FAILED = Path("/var/lib/wfweb/.local/share/wfweb/wfweb/qrz-logger-failed.jsonl")
 QRZ_URL = "https://logbook.qrz.com/api"
 EQSL_URL = "https://www.eqsl.cc/qslcard/ImportADIF.cfm"
+CLUBLOG_URL = "https://clublog.org/realtime.php"
+HRDLOG_URL = "https://robot.hrdlog.net/NewEntry.aspx"
+HAMQTH_URL = "https://www.hamqth.com/qso_realtime.php"
 RETRY_SECONDS = 30
 
 
@@ -169,6 +172,82 @@ def submit_eqsl(args, adif):
 
 
 #===============================================================================
+# Submit one ADIF record to Club Log's real-time upload API
+#===============================================================================
+def submit_clublog(args, adif):
+    payload = urllib.parse.urlencode({
+        "email": args.clublog_email,
+        "password": args.clublog_password,
+        "callsign": args.station_callsign,
+        "adif": adif,
+        "api": args.clublog_api_key,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        CLUBLOG_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": f"wfweb-auto-logger/2.0 ({args.station_callsign})",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    message = " ".join(body.split())
+    if message.upper() == "OK":
+        return True, message
+    return False, message or "Club Log returned an empty response"
+
+
+#===============================================================================
+# Submit one ADIF record to HRDLog.net's real-time upload API
+#===============================================================================
+def submit_hrdlog(args, adif):
+    payload = urllib.parse.urlencode({
+        "Callsign": args.station_callsign,
+        "Code": args.hrdlog_code,
+        "App": "wfweb-auto-logger",
+        "QSO": adif,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        HRDLOG_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": f"wfweb-auto-logger/2.0 ({args.station_callsign})",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    message = " ".join(body.split())
+    if message.upper() == "OK":
+        return True, message
+    return False, message or "HRDLog.net returned an empty response"
+
+
+#===============================================================================
+# Submit one ADIF record to HamQTH's real-time upload API
+#===============================================================================
+def submit_hamqth(args, adif):
+    payload = urllib.parse.urlencode({
+        "u": args.hamqth_username,
+        "p": args.hamqth_password,
+        "qso": adif,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        HAMQTH_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": f"wfweb-auto-logger/2.0 ({args.station_callsign})",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    message = " ".join(body.split())
+    normalized = message.upper()
+    if normalized == "OK" or "<STATUS>OK</STATUS>" in normalized:
+        return True, message
+    return False, message or "HamQTH returned an empty response"
+
+
+#===============================================================================
 # Read saved logger offsets, returning an empty state when none is usable
 #===============================================================================
 def read_state(path):
@@ -230,6 +309,12 @@ def configured_loggers(args):
         loggers["qrz"] = submit_qrz
     if args.enable_eqsl:
         loggers["eqsl"] = submit_eqsl
+    if args.enable_clublog:
+        loggers["clublog"] = submit_clublog
+    if args.enable_hrdlog:
+        loggers["hrdlog"] = submit_hrdlog
+    if args.enable_hamqth:
+        loggers["hamqth"] = submit_hamqth
     return loggers
 
 
@@ -361,17 +446,37 @@ def parse_args(argv=None):
     parser.add_argument("--eqsl-username", default=os.environ.get("EQSL_USERNAME"))
     parser.add_argument("--eqsl-password", default=os.environ.get("EQSL_PASSWORD"))
     parser.add_argument("--eqsl-qth-nickname", default=os.environ.get("EQSL_QTH_NICKNAME"))
+    parser.add_argument("--enable-clublog", action="store_true")
+    parser.add_argument("--clublog-email", default=os.environ.get("CLUBLOG_EMAIL"))
+    parser.add_argument("--clublog-password", default=os.environ.get("CLUBLOG_PASSWORD"))
+    parser.add_argument("--clublog-api-key", default=os.environ.get("CLUBLOG_API_KEY"))
+    parser.add_argument("--enable-hrdlog", action="store_true")
+    parser.add_argument("--hrdlog-code", default=os.environ.get("HRDLOG_CODE"))
+    parser.add_argument("--enable-hamqth", action="store_true")
+    parser.add_argument("--hamqth-username", default=os.environ.get("HAMQTH_USERNAME"))
+    parser.add_argument("--hamqth-password", default=os.environ.get("HAMQTH_PASSWORD"))
     args = parser.parse_args(argv)
     # Report all configuration errors together so they can be fixed at once.
     errors = []
-    if not args.enable_qrz and not args.enable_eqsl:
-        errors.append("enable at least one service with --enable-qrz and/or --enable-eqsl")
+    enabled = (args.enable_qrz, args.enable_eqsl, args.enable_clublog,
+               args.enable_hrdlog, args.enable_hamqth)
+    if not any(enabled):
+        errors.append("enable at least one logging service")
     if not args.station_callsign:
         errors.append("supply --station-callsign or STATION_CALLSIGN")
     if args.enable_qrz and not args.qrz_api_key:
         errors.append("--enable-qrz requires --qrz-api-key or QRZ_API_KEY")
     if args.enable_eqsl and (not args.eqsl_username or not args.eqsl_password):
         errors.append("--enable-eqsl requires eQSL username and password")
+    if args.enable_clublog and not all((args.clublog_email,
+                                        args.clublog_password,
+                                        args.clublog_api_key)):
+        errors.append("--enable-clublog requires email, password, and API key")
+    if args.enable_hrdlog and not args.hrdlog_code:
+        errors.append("--enable-hrdlog requires --hrdlog-code or HRDLOG_CODE")
+    if args.enable_hamqth and not all((args.hamqth_username,
+                                      args.hamqth_password)):
+        errors.append("--enable-hamqth requires username and password")
     if errors:
         parser.error("; ".join(errors))
     return args

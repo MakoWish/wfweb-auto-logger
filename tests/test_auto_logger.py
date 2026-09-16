@@ -63,6 +63,49 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertEqual(message, "1 out of 1 records added")
 
     #===========================================================================
+    # Verify each form-based real-time API receives its documented credentials
+    #===========================================================================
+    def test_additional_logger_requests(self):
+        cases = [
+            (module.submit_clublog, SimpleNamespace(
+                station_callsign="W1AW", clublog_email="a@example.com",
+                clublog_password="secret", clublog_api_key="club-key",
+            ), {"email": "a@example.com", "password": "secret",
+                "callsign": "W1AW", "api": "club-key", "adif": "<EOR>"}),
+            (module.submit_hrdlog, SimpleNamespace(
+                station_callsign="W1AW", hrdlog_code="upload-code",
+            ), {"Callsign": "W1AW", "Code": "upload-code",
+                "App": "wfweb-auto-logger", "QSO": "<EOR>"}),
+            (module.submit_hamqth, SimpleNamespace(
+                station_callsign="W1AW", hamqth_username="w1aw",
+                hamqth_password="secret",
+            ), {"u": "w1aw", "p": "secret", "qso": "<EOR>"}),
+        ]
+        for submit, args, expected in cases:
+            with self.subTest(submit=submit.__name__):
+                response = mock.MagicMock()
+                response.read.return_value = b"OK"
+                response.__enter__.return_value = response
+                with mock.patch.object(module.urllib.request, "urlopen",
+                                       return_value=response) as open_url:
+                    accepted, message = submit(args, "<EOR>")
+                request = open_url.call_args.args[0]
+                self.assertEqual(urllib.parse.parse_qs(request.data.decode()),
+                                 {key: [value] for key, value in expected.items()})
+                self.assertTrue(accepted)
+                self.assertEqual(message, "OK")
+
+    #===========================================================================
+    # Verify all supported destinations are independently registered
+    #===========================================================================
+    def test_configured_loggers_includes_additional_services(self):
+        args = SimpleNamespace(enable_qrz=True, enable_eqsl=True,
+                               enable_clublog=True, enable_hrdlog=True,
+                               enable_hamqth=True)
+        self.assertEqual(set(module.configured_loggers(args)),
+                         {"qrz", "eqsl", "clublog", "hrdlog", "hamqth"})
+
+    #===========================================================================
     # Verify network errors remain pending and are not recorded as rejections
     #===========================================================================
     def test_network_failure_is_pending_without_failure_record(self):

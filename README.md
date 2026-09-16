@@ -4,7 +4,7 @@
 
 ## About
 
-`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com and eQSL.cc are currently supported.
+`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com, eQSL.cc, Club Log, HRDLog.net, and HamQTH are currently supported.
 
 ## Requirements
 
@@ -20,7 +20,9 @@ At least one destination and the station callsign must be configured. Multiple `
 ./wfweb-auto-logger \
   --station-callsign KF0ZJT \
   --enable-qrz --qrz-api-key 'your-qrz-key' \
-  --enable-eqsl --eqsl-username 'KF0ZJT' --eqsl-password 'your-eqsl-password'
+  --enable-eqsl --eqsl-username 'KF0ZJT' --eqsl-password 'your-eqsl-password' \
+  --enable-clublog --clublog-email 'you@example.com' \
+  --clublog-password 'your-clublog-password' --clublog-api-key 'your-clublog-key'
 ```
 
 Credentials can instead be supplied through environment variables, which keeps secrets out of the process list:
@@ -30,7 +32,8 @@ export STATION_CALLSIGN='KF0ZJT'
 export QRZ_API_KEY='your-qrz-key'
 export EQSL_USERNAME='KF0ZJT'
 export EQSL_PASSWORD='your-eqsl-password'
-./wfweb-auto-logger --enable-qrz --enable-eqsl
+export HRDLOG_CODE='your-hrdlog-upload-code'
+./wfweb-auto-logger --enable-qrz --enable-eqsl --enable-hrdlog
 ```
 
 ### QRZ.com
@@ -52,6 +55,18 @@ fields required by eQSL's real-time ADIF interface. If eQSL reports
 `Missing eQSL_User`, verify that the installed logger contains eQSL support and
 that `--eqsl-username` (or `EQSL_USERNAME`) is set.
 
+### Club Log
+
+Enable Club Log with `--enable-clublog`. Supply the account email, password, and application API key with `--clublog-email`, `--clublog-password`, and `--clublog-api-key`, or their corresponding environment variables. The application API key is distinct from the account password.
+
+### HRDLog.net
+
+Enable HRDLog.net with `--enable-hrdlog`. Supply the upload code shown in the HRDLog.net account settings with `--hrdlog-code` or `HRDLOG_CODE`.
+
+### HamQTH
+
+Enable HamQTH with `--enable-hamqth`. Supply the account username and password with `--hamqth-username` and `--hamqth-password`, or `HAMQTH_USERNAME` and `HAMQTH_PASSWORD`.
+
 ## Options
 
 | Option | Environment variable | Description |
@@ -63,6 +78,15 @@ that `--eqsl-username` (or `EQSL_USERNAME`) is set.
 | `--eqsl-username NAME` | `EQSL_USERNAME` | eQSL account username/callsign |
 | `--eqsl-password PASSWORD` | `EQSL_PASSWORD` | eQSL account password |
 | `--eqsl-qth-nickname NAME` | `EQSL_QTH_NICKNAME` | Optional eQSL QTH nickname |
+| `--enable-clublog` | — | Upload to Club Log |
+| `--clublog-email EMAIL` | `CLUBLOG_EMAIL` | Club Log account email |
+| `--clublog-password PASSWORD` | `CLUBLOG_PASSWORD` | Club Log account password |
+| `--clublog-api-key KEY` | `CLUBLOG_API_KEY` | Club Log application API key |
+| `--enable-hrdlog` | — | Upload to HRDLog.net |
+| `--hrdlog-code CODE` | `HRDLOG_CODE` | HRDLog.net upload code |
+| `--enable-hamqth` | — | Upload to HamQTH |
+| `--hamqth-username NAME` | `HAMQTH_USERNAME` | HamQTH account username |
+| `--hamqth-password PASSWORD` | `HAMQTH_PASSWORD` | HamQTH account password |
 | `--log-file PATH` | — | WFWEB JSONL log path |
 | `--state-file PATH` | — | Upload progress state path |
 | `--failed-file PATH` | — | Rejected or invalid record output path |
