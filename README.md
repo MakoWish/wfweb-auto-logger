@@ -129,6 +129,9 @@ Create the configuration directory and `/etc/wfweb-auto-logger/config.env`:
 
 ```console
 sudo install -d -m 0755 -o root -g root /etc/wfweb-auto-logger
+sudo touch /etc/wfweb-auto-logger/config.env
+sudo chown root:root /etc/wfweb-auto-logger/config.env
+sudo chmod 0600 /etc/wfweb-auto-logger/config.env
 sudoedit /etc/wfweb-auto-logger/config.env
 ```
 
@@ -162,14 +165,28 @@ contains multiple options. After changing only `config.env`, restart the
 service with `sudo systemctl restart wfweb-auto-logger.service`; a
 `daemon-reload` is needed only after changing the unit itself.
 
-Protect the credentials, load the unit, and start it now and on future boots:
+Load the unit and start it now and on future boots:
 
 ```console
-sudo chown root:root /etc/wfweb-auto-logger/config.env
-sudo chmod 0600 /etc/wfweb-auto-logger/config.env
 sudo systemctl daemon-reload
 sudo systemctl enable --now wfweb-auto-logger.service
 ```
+
+The root-owned `0600` configuration file is intentional. The systemd service
+manager reads `EnvironmentFile` before starting the process as `wfweb`, so the
+service account does not need permission to read the file directly. A `Failed
+to load environment files: No such file or directory` error means the file is
+not present at the path used by the installed unit, rather than that `wfweb`
+cannot read it. Confirm both the file and the installed unit with:
+
+```console
+sudo test -f /etc/wfweb-auto-logger/config.env && echo "config exists"
+sudo systemctl cat wfweb-auto-logger.service
+```
+
+If `systemctl cat` shows a different environment-file path, reinstall the unit
+using the commands above and run `sudo systemctl daemon-reload` before starting
+it again.
 
 The supplied unit runs as the existing `wfweb` user because the default QSO
 log and logger state live below `/var/lib/wfweb`. If WFWEB runs under a
