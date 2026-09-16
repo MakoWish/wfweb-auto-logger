@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 
+# Define the WFWEB paths and remote API endpoints used by default.
 DEFAULT_LOG = Path("/var/lib/wfweb/.local/share/wfweb/wfweb/qso-log.jsonl")
 # Retain the original filenames so existing QRZ installations resume from their
 # saved offset when they upgrade to the multi-service state format.
@@ -21,15 +22,24 @@ EQSL_URL = "https://www.eqsl.cc/qslcard/ImportADIF.cfm"
 RETRY_SECONDS = 30
 
 
+#===============================================================================
+# Write a status message immediately instead of waiting for output buffering
+#===============================================================================
 def log(msg):
     print(msg, flush=True)
 
 
+#===============================================================================
+# Write a status message only when verbose output is enabled
+#===============================================================================
 def verbose(args, msg):
     if args.verbose:
         log(msg)
 
 
+#===============================================================================
+# Format a non-empty value as an ADIF field
+#===============================================================================
 def adif_field(name, value):
     if value is None:
         return ""
@@ -37,8 +47,10 @@ def adif_field(name, value):
     return f"<{name}:{len(value)}>{value}" if value else ""
 
 
+#===============================================================================
+# Convert a WFWEB mode into its ADIF mode and optional submode
+#===============================================================================
 def normalize_mode(mode):
-    """Return the ADIF (MODE, SUBMODE) pair."""
     mode = str(mode or "").strip().upper()
     mappings = {
         "USB": ("SSB", None), "LSB": ("SSB", None), "SSB": ("SSB", None),
@@ -52,6 +64,9 @@ def normalize_mode(mode):
     return mappings.get(mode, (mode, None))
 
 
+#===============================================================================
+# Validate a WFWEB QSO and serialize it as an ADIF record
+#===============================================================================
 def qso_to_adif(qso, station_callsign):
     call = str(qso.get("call", "")).strip().upper()
     date = str(qso.get("date", "")).strip()
@@ -69,6 +84,7 @@ def qso_to_adif(qso, station_callsign):
     if not mode:
         raise ValueError("QSO has no mode")
 
+    # Build required fields before appending values that may not be present.
     fields = [
         adif_field("CALL", call),
         adif_field("STATION_CALLSIGN", station_callsign.upper()),
@@ -95,6 +111,9 @@ def qso_to_adif(qso, station_callsign):
     return "".join(fields)
 
 
+#===============================================================================
+# Submit one ADIF record to the QRZ.com Logbook API
+#===============================================================================
 def submit_qrz(args, adif):
     payload = urllib.parse.urlencode({
         "KEY": args.qrz_api_key, "ACTION": "INSERT", "ADIF": adif,
@@ -117,6 +136,9 @@ def submit_qrz(args, adif):
     return False, result.get("REASON", body)
 
 
+#===============================================================================
+# Submit one ADIF record to the eQSL.cc ADIF import endpoint
+#===============================================================================
 def submit_eqsl(args, adif):
     # eQSL authenticates uploads with credentials in the ADIF header rather
     # than an API key. QTHNickname is optional, but selects the desired profile.
@@ -145,6 +167,9 @@ def submit_eqsl(args, adif):
     return False, "eQSL did not confirm the upload: " + " ".join(body.split())[:500]
 
 
+#===============================================================================
+# Read saved logger offsets, returning an empty state when none is usable
+#===============================================================================
 def read_state(path):
     try:
         with path.open("r", encoding="utf-8") as state_file:
@@ -153,7 +178,11 @@ def read_state(path):
         return {}
 
 
+#===============================================================================
+# Resolve an offset for each enabled logger and migrate legacy QRZ state
+#===============================================================================
 def state_offsets(state, logger_names, inode, initial_offset):
+    # A new inode indicates rotation, so an existing state restarts at zero.
     if state.get("inode") != inode:
         offset = 0 if state else initial_offset
         return {name: offset for name in logger_names}
@@ -168,6 +197,9 @@ def state_offsets(state, logger_names, inode, initial_offset):
             for name in logger_names}
 
 
+#===============================================================================
+# Atomically persist the current per-logger offsets
+#===============================================================================
 def write_state(path, inode, offsets):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -177,6 +209,9 @@ def write_state(path, inode, offsets):
     os.replace(tmp, path)
 
 
+#===============================================================================
+# Append a rejected or invalid QSO to the failure JSONL file
+#===============================================================================
 def record_failure(path, logger_name, qso, reason):
     path.parent.mkdir(parents=True, exist_ok=True)
     entry = {"logger": logger_name, "qso": qso, "reason": reason,
@@ -185,6 +220,9 @@ def record_failure(path, logger_name, qso, reason):
         failed_file.write(json.dumps(entry, separators=(",", ":")) + "\n")
 
 
+#===============================================================================
+# Build the mapping of enabled logger names to submission functions
+#===============================================================================
 def configured_loggers(args):
     loggers = {}
     if args.enable_qrz:
@@ -194,6 +232,9 @@ def configured_loggers(args):
     return loggers
 
 
+#===============================================================================
+# Submit a QSO to one logger and classify the result for retry handling
+#===============================================================================
 def process_for_logger(args, logger_name, submit, qso, adif):
     if args.dry_run:
         log(f"DRY RUN: not submitting to {logger_name.upper()}")
@@ -214,6 +255,9 @@ def process_for_logger(args, logger_name, submit, qso, adif):
     return True
 
 
+#===============================================================================
+# Follow the WFWEB JSONL file and deliver each QSO to every enabled logger
+#===============================================================================
 def follow(args):
     loggers = configured_loggers(args)
     state = read_state(args.state_file)
@@ -242,6 +286,7 @@ def follow(args):
                 line = log_file.readline()
                 if line:
                     next_offset = log_file.tell()
+                    # Only call services that have not advanced past this line.
                     due = [name for name, offset in offsets.items()
                            if offset <= line_offset]
                     try:
@@ -291,6 +336,9 @@ def follow(args):
                     break
 
 
+#===============================================================================
+# Parse command-line settings and validate credentials for enabled loggers
+#===============================================================================
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Upload new WFWEB QSO log entries to enabled logging services"
@@ -313,6 +361,7 @@ def parse_args(argv=None):
     parser.add_argument("--eqsl-password", default=os.environ.get("EQSL_PASSWORD"))
     parser.add_argument("--eqsl-qth-nickname", default=os.environ.get("EQSL_QTH_NICKNAME"))
     args = parser.parse_args(argv)
+    # Report all configuration errors together so they can be fixed at once.
     errors = []
     if not args.enable_qrz and not args.enable_eqsl:
         errors.append("enable at least one service with --enable-qrz and/or --enable-eqsl")
@@ -327,6 +376,9 @@ def parse_args(argv=None):
     return args
 
 
+#===============================================================================
+# Run the logger until it is interrupted
+#===============================================================================
 def main():
     args = parse_args()
     try:

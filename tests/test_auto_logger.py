@@ -14,6 +14,9 @@ loader.exec_module(module)
 
 
 class AutoLoggerTests(unittest.TestCase):
+    #===========================================================================
+    # Verify ADIF mode normalization and frequency conversion
+    #===========================================================================
     def test_adif_normalizes_submode_and_frequency(self):
         adif = module.qso_to_adif({
             "call": "w1aw", "date": "20260916", "time": "1234",
@@ -24,12 +27,18 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertIn("<MODE:4>MFSK<SUBMODE:3>FT4", adif)
         self.assertIn("<FREQ:5>14.08", adif)
 
+    #===========================================================================
+    # Verify the original QRZ offset is retained during state migration
+    #===========================================================================
     def test_legacy_state_only_migrates_qrz_offset(self):
         offsets = module.state_offsets(
             {"inode": 10, "offset": 42}, ["qrz", "eqsl"], 10, 100
         )
         self.assertEqual(offsets, {"qrz": 42, "eqsl": 100})
 
+    #===========================================================================
+    # Verify eQSL credentials and the QSO are encoded in the upload request
+    #===========================================================================
     def test_eqsl_request_contains_adif_credentials(self):
         args = SimpleNamespace(
             eqsl_username="W1AW", eqsl_password="secret",
@@ -47,6 +56,9 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertIn("PASSWORD%3A6%3Esecret", url)
         self.assertEqual(message, "1 out of 1 records added")
 
+    #===========================================================================
+    # Verify network errors remain pending and are not recorded as rejections
+    #===========================================================================
     def test_network_failure_is_pending_without_failure_record(self):
         args = SimpleNamespace(dry_run=False, failed_file=pathlib.Path("unused"), verbose=False)
         submit = mock.Mock(side_effect=module.urllib.error.URLError("offline"))
@@ -55,6 +67,9 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertFalse(handled)
         record.assert_not_called()
 
+    #===========================================================================
+    # Verify an eQSL rejection is attributed only to the eQSL logger
+    #===========================================================================
     def test_rejection_is_recorded_for_only_that_logger(self):
         with tempfile.TemporaryDirectory() as directory:
             failed = pathlib.Path(directory) / "failed.jsonl"
