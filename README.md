@@ -4,7 +4,7 @@
 
 ## About
 
-`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. Integrations are available for QRZ.com, eQSL.cc, Club Log, HRDLog.net, HamQTH, and World Radio League.
+`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. Integrations are available for QRZ.com, eQSL.cc, HamQTH, and World Radio League.
 
 ## Integration status
 
@@ -13,11 +13,7 @@
 | QRZ.com | **Verified** | Confirmed working |
 | eQSL.cc | **Verified** | Confirmed working |
 | World Radio League | **Verified** | Confirmed working against the published API contract |
-| Club Log | **Unverified** | Best-effort implementation; current official API documentation has not been reviewed |
-| HRDLog.net | **Unverified** | Best-effort implementation; current official API documentation has not been reviewed |
-| HamQTH | **Unverified** | Best-effort implementation; current official API documentation has not been reviewed |
-
-Do not rely on an unverified integration as the only copy of a contact. Its request format may need adjustment after review of the current official API documentation or testing with a live account.
+| HamQTH | **Documented; testing requested** | Implemented against HamQTH's published real-time upload contract; live-account confirmation is pending |
 
 ## Requirements
 
@@ -34,8 +30,7 @@ At least one destination and the station callsign must be configured. Multiple `
   --station-callsign KF0ZJT \
   --enable-qrz --qrz-api-key 'your-qrz-key' \
   --enable-eqsl --eqsl-username 'KF0ZJT' --eqsl-password 'your-eqsl-password' \
-  --enable-clublog --clublog-email 'you@example.com' \
-  --clublog-password 'your-clublog-password' --clublog-api-key 'your-clublog-key'
+  --enable-hamqth --hamqth-username 'KF0ZJT' --hamqth-password 'your-hamqth-password'
 ```
 
 Credentials can instead be supplied through environment variables, which keeps secrets out of the process list:
@@ -45,8 +40,9 @@ export STATION_CALLSIGN='KF0ZJT'
 export QRZ_API_KEY='your-qrz-key'
 export EQSL_USERNAME='KF0ZJT'
 export EQSL_PASSWORD='your-eqsl-password'
-export HRDLOG_CODE='your-hrdlog-upload-code'
-./wfweb-auto-logger --enable-qrz --enable-eqsl --enable-hrdlog
+export HAMQTH_USERNAME='KF0ZJT'
+export HAMQTH_PASSWORD='your-hamqth-password'
+./wfweb-auto-logger --enable-qrz --enable-eqsl --enable-hamqth
 ```
 
 ### QRZ.com
@@ -68,23 +64,11 @@ fields required by eQSL's real-time ADIF interface. If eQSL reports
 `Missing eQSL_User`, verify that the installed logger contains eQSL support and
 that `--eqsl-username` (or `EQSL_USERNAME`) is set.
 
-### Club Log
-
-> **Unverified:** this is a best-effort integration and has not been validated against current official API documentation or a live account.
-
-Enable Club Log with `--enable-clublog`. Supply the account email, password, and application API key with `--clublog-email`, `--clublog-password`, and `--clublog-api-key`, or their corresponding environment variables. The application API key is distinct from the account password.
-
-### HRDLog.net
-
-> **Unverified:** this is a best-effort integration and has not been validated against current official API documentation or a live account.
-
-Enable HRDLog.net with `--enable-hrdlog`. Supply the upload code shown in the HRDLog.net account settings with `--hrdlog-code` or `HRDLOG_CODE`.
-
 ### HamQTH
 
-> **Unverified:** this is a best-effort integration and has not been validated against current official API documentation or a live account.
-
 Enable HamQTH with `--enable-hamqth`. Supply the account username and password with `--hamqth-username` and `--hamqth-password`, or `HAMQTH_USERNAME` and `HAMQTH_PASSWORD`.
+
+The logger uses HamQTH's documented real-time QSO endpoint and sends one `insert` request per new contact. HamQTH requires both sent and received signal reports. HTTP 400 and 403 responses are recorded as rejections; server-side HTTP 500 responses remain pending for retry. This integration has been checked against the published API documentation and is ready for live-account testing.
 
 ### World Radio League
 
@@ -111,12 +95,6 @@ With `--verbose`, the logger prints the contact JSON sent to World Radio League.
 | `--eqsl-username NAME` | `EQSL_USERNAME` | eQSL account username/callsign |
 | `--eqsl-password PASSWORD` | `EQSL_PASSWORD` | eQSL account password |
 | `--eqsl-qth-nickname NAME` | `EQSL_QTH_NICKNAME` | Optional eQSL QTH nickname |
-| `--enable-clublog` | — | Upload to Club Log |
-| `--clublog-email EMAIL` | `CLUBLOG_EMAIL` | Club Log account email |
-| `--clublog-password PASSWORD` | `CLUBLOG_PASSWORD` | Club Log account password |
-| `--clublog-api-key KEY` | `CLUBLOG_API_KEY` | Club Log application API key |
-| `--enable-hrdlog` | — | Upload to HRDLog.net |
-| `--hrdlog-code CODE` | `HRDLOG_CODE` | HRDLog.net upload code |
 | `--enable-hamqth` | — | Upload to HamQTH |
 | `--hamqth-username NAME` | `HAMQTH_USERNAME` | HamQTH account username |
 | `--hamqth-password PASSWORD` | `HAMQTH_PASSWORD` | HamQTH account password |

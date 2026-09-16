@@ -65,47 +65,75 @@ class AutoLoggerTests(unittest.TestCase):
         self.assertEqual(message, "1 out of 1 records added")
 
     #===========================================================================
-    # Verify each best-effort form integration encodes its configured credentials
+    # Verify HamQTH receives its documented form fields and ADIF field names
     #===========================================================================
-    def test_additional_logger_requests(self):
-        cases = [
-            (module.submit_clublog, SimpleNamespace(
-                station_callsign="W1AW", clublog_email="a@example.com",
-                clublog_password="secret", clublog_api_key="club-key",
-            ), {"email": "a@example.com", "password": "secret",
-                "callsign": "W1AW", "api": "club-key", "adif": "<EOR>"}),
-            (module.submit_hrdlog, SimpleNamespace(
-                station_callsign="W1AW", hrdlog_code="upload-code",
-            ), {"Callsign": "W1AW", "Code": "upload-code",
-                "App": "wfweb-auto-logger", "QSO": "<EOR>"}),
-            (module.submit_hamqth, SimpleNamespace(
-                station_callsign="W1AW", hamqth_username="w1aw",
-                hamqth_password="secret",
-            ), {"u": "w1aw", "p": "secret", "qso": "<EOR>"}),
-        ]
-        for submit, args, expected in cases:
-            with self.subTest(submit=submit.__name__):
-                response = mock.MagicMock()
-                response.read.return_value = b"OK"
-                response.__enter__.return_value = response
-                with mock.patch.object(module.urllib.request, "urlopen",
-                                       return_value=response) as open_url:
-                    accepted, message = submit(args, {}, "<EOR>")
-                request = open_url.call_args.args[0]
-                self.assertEqual(urllib.parse.parse_qs(request.data.decode()),
-                                 {key: [value] for key, value in expected.items()})
-                self.assertTrue(accepted)
-                self.assertEqual(message, "OK")
+    def test_hamqth_request_uses_documented_contract(self):
+        args = SimpleNamespace(station_callsign="W1AW", hamqth_username="w1aw",
+                               hamqth_password="secret")
+        response = mock.MagicMock()
+        response.read.return_value = b"QSO OK"
+        response.__enter__.return_value = response
+        with mock.patch.object(module.urllib.request, "urlopen",
+                               return_value=response) as open_url:
+            accepted, message = module.submit_hamqth(args, {
+                "call": "KF0ZJT", "date": "20260916", "time": "1435",
+                "freq": 14074000, "band": "20m", "mode": "FT8",
+                "rstSent": "-12", "rstRcvd": "-08",
+            }, "unused")
+        request = open_url.call_args.args[0]
+        fields = urllib.parse.parse_qs(request.data.decode())
+        self.assertEqual(fields["u"], ["w1aw"])
+        self.assertEqual(fields["p"], ["secret"])
+        self.assertEqual(fields["c"], ["W1AW"])
+        self.assertEqual(fields["prg"], ["wfweb-auto-logger"])
+        self.assertEqual(fields["cmd"], ["insert"])
+        self.assertIn("<QSO_DATE:8>20260916", fields["adif"][0])
+        self.assertIn("<RST_S:3>-12<RST_R:3>-08", fields["adif"][0])
+        self.assertTrue(accepted)
+        self.assertEqual(message, "QSO OK")
+
+    #===========================================================================
+    # Verify HamQTH HTTP rejections preserve the response body for diagnosis
+    #===========================================================================
+    def test_hamqth_qso_rejection_is_handled(self):
+        args = SimpleNamespace(station_callsign="W1AW", hamqth_username="w1aw",
+                               hamqth_password="secret")
+        error = module.urllib.error.HTTPError(
+            module.HAMQTH_URL, 400, "QSO Rejected", {},
+            io.BytesIO(b"QSO already exists in database"),
+        )
+        with mock.patch.object(module.urllib.request, "urlopen", side_effect=error):
+            accepted, message = module.submit_hamqth(args, {
+                "call": "KF0ZJT", "date": "20260916", "time": "1435",
+                "band": "20m", "mode": "FT8",
+                "rstSent": "-12", "rstRcvd": "-08",
+            }, "unused")
+        self.assertFalse(accepted)
+        self.assertEqual(message, "HTTP 400: QSO already exists in database")
+
+    #===========================================================================
+    # Verify mandatory HamQTH signal reports are checked before making a request
+    #===========================================================================
+    def test_hamqth_requires_both_signal_reports(self):
+        args = SimpleNamespace(station_callsign="W1AW", hamqth_username="w1aw",
+                               hamqth_password="secret")
+        with mock.patch.object(module.urllib.request, "urlopen") as open_url:
+            accepted, message = module.submit_hamqth(args, {
+                "call": "KF0ZJT", "date": "20260916", "time": "1435",
+                "band": "20m", "mode": "FT8", "rstSent": "-12",
+            }, "unused")
+        self.assertFalse(accepted)
+        self.assertIn("both sent and received", message)
+        open_url.assert_not_called()
 
     #===========================================================================
     # Verify all supported destinations are independently registered
     #===========================================================================
     def test_configured_loggers_includes_additional_services(self):
         args = SimpleNamespace(enable_qrz=True, enable_eqsl=True,
-                               enable_clublog=True, enable_hrdlog=True,
                                enable_hamqth=True, enable_wrl=True)
         self.assertEqual(set(module.configured_loggers(args)),
-                         {"qrz", "eqsl", "clublog", "hrdlog", "hamqth", "wrl"})
+                         {"qrz", "eqsl", "hamqth", "wrl"})
 
     #===========================================================================
     # Verify World Radio League receives documented contact JSON and authentication
