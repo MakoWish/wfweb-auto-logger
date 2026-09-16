@@ -125,21 +125,42 @@ sudo install -m 0644 systemd/wfweb-auto-logger.service \
   /etc/systemd/system/wfweb-auto-logger.service
 ```
 
-Create the configuration directory and `/etc/wfweb-auto-logger/config.env`
-with the destinations to enable and their credentials. This QRZ-only example
-can be extended with any options and environment variables from the table
-above:
+Create the configuration directory and `/etc/wfweb-auto-logger/config.env`:
 
 ```console
 sudo install -d -m 0755 -o root -g root /etc/wfweb-auto-logger
 sudoedit /etc/wfweb-auto-logger/config.env
 ```
 
+Credentials alone do not enable a destination. The `--enable-*` options do not
+have direct environment-variable equivalents, so list every desired destination
+in `LOGGER_ARGS`. For example, this configuration enables all four services:
+
 ```ini
-LOGGER_ARGS=--enable-qrz
-STATION_CALLSIGN=KF0ZJT
-QRZ_API_KEY=your-qrz-key
+LOGGER_ARGS="--enable-qrz --enable-wrl --enable-eqsl --enable-hamqth"
+
+STATION_CALLSIGN="KF0ZJT"
+
+QRZ_API_KEY="your-qrz-key"
+
+WRL_API_KEY="wrl_live_your-key"
+# Optional when the WRL account has a default logbook:
+WRL_LOGBOOK_ID="00000000-0000-0000-0000-000000000000"
+
+EQSL_USERNAME="KF0ZJT"
+EQSL_PASSWORD="your-eqsl-password"
+# Optional:
+EQSL_QTH_NICKNAME="Home"
+
+HAMQTH_USERNAME="KF0ZJT"
+HAMQTH_PASSWORD="your-hamqth-password"
 ```
+
+Remove an `--enable-*` option and its service-specific settings if that
+destination is not wanted. Keep the quotes around `LOGGER_ARGS` when it
+contains multiple options. After changing only `config.env`, restart the
+service with `sudo systemctl restart wfweb-auto-logger.service`; a
+`daemon-reload` is needed only after changing the unit itself.
 
 Protect the credentials, load the unit, and start it now and on future boots:
 
