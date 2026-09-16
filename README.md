@@ -110,6 +110,51 @@ With `--verbose`, the logger prints the contact JSON sent to World Radio League.
 
 Run `./wfweb-auto-logger --help` for the current defaults.
 
+## Run at system startup with systemd
+
+The repository includes a ready-to-install unit at
+[`systemd/wfweb-auto-logger.service`](systemd/wfweb-auto-logger.service). Keep
+the unit with the application source (rather than in `docs/`), then install it
+under `/etc/systemd/system`, where locally managed system units belong.
+
+Install the logger and unit:
+
+```console
+sudo install -m 0755 wfweb-auto-logger /usr/local/bin/wfweb-auto-logger
+sudo install -m 0644 systemd/wfweb-auto-logger.service \
+  /etc/systemd/system/wfweb-auto-logger.service
+```
+
+Create `/etc/wfweb-auto-logger.env` with the destinations to enable and their
+credentials. This QRZ-only example can be extended with any options and
+environment variables from the table above:
+
+```ini
+LOGGER_ARGS=--enable-qrz
+STATION_CALLSIGN=KF0ZJT
+QRZ_API_KEY=your-qrz-key
+```
+
+Protect the credentials, load the unit, and start it now and on future boots:
+
+```console
+sudo chown root:root /etc/wfweb-auto-logger.env
+sudo chmod 0600 /etc/wfweb-auto-logger.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now wfweb-auto-logger.service
+```
+
+The supplied unit runs as the existing `wfweb` user because the default QSO
+log and logger state live below `/var/lib/wfweb`. If WFWEB runs under a
+different account or the script is installed elsewhere, update `User`, `Group`,
+`HOME`, `ReadWritePaths`, or `ExecStart` in the installed unit as appropriate.
+Inspect startup and upload messages with:
+
+```console
+sudo systemctl status wfweb-auto-logger.service
+sudo journalctl -u wfweb-auto-logger.service -f
+```
+
 ## Delivery, retries, and failures
 
 Progress is tracked independently for each enabled service in the state file. A successful QRZ upload is therefore not repeated merely because the same eQSL upload encountered a temporary network error. Services with transient network errors retry after 30 seconds while successful services continue from their own saved position.
