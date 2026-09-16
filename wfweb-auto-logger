@@ -1,0 +1,453 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+
+# Define some defaults to fall back on if args not passed
+DEFAULT_LOG = Path(
+    "/var/lib/wfweb/.local/share/wfweb/wfweb/qso-log.jsonl"
+)
+
+DEFAULT_STATE = Path(
+    "/var/lib/wfweb/.local/share/wfweb/wfweb/qrz-logger.state"
+)
+
+DEFAULT_FAILED = Path(
+    "/var/lib/wfweb/.local/share/wfweb/wfweb/qrz-logger-failed.jsonl"
+)
+
+QRZ_URL = "https://logbook.qrz.com/api"
+
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def verbose(args, msg):
+    if args.verbose:
+        log(msg)
+
+
+def adif_field(name, value):
+    if value is None:
+        return ""
+
+    value = str(value).strip()
+    if not value:
+        return ""
+
+    return f"<{name}:{len(value)}>{value}"
+
+
+def normalize_mode(mode):
+    """
+    Return (MODE, SUBMODE).
+
+    ADIF uses SSB rather than USB/LSB.
+    FT4 and JS8 are submodes of MFSK.
+    """
+    mode = str(mode or "").strip().upper()
+
+    mappings = {
+        "USB": ("SSB", None),
+        "LSB": ("SSB", None),
+        "SSB": ("SSB", None),
+
+        "FT8": ("FT8", None),
+        "FT4": ("MFSK", "FT4"),
+        "JS8": ("MFSK", "JS8"),
+
+        "CW": ("CW", None),
+        "AM": ("AM", None),
+        "FM": ("FM", None),
+        "RTTY": ("RTTY", None),
+
+        "FREEDV": ("DIGITALVOICE", "FREEDV"),
+        "DIGITALVOICE": ("DIGITALVOICE", None),
+    }
+
+    return mappings.get(mode, (mode, None))
+
+
+def qso_to_adif(qso, station_callsign):
+    call = str(qso.get("call", "")).strip().upper()
+    date = str(qso.get("date", "")).strip()
+    qso_time = str(qso.get("time", "")).strip()
+    band = str(qso.get("band", "")).strip().lower()
+
+    if not call:
+        raise ValueError("QSO has no callsign")
+
+    if len(date) != 8:
+        raise ValueError(f"Invalid QSO date: {date!r}")
+
+    if len(qso_time) not in (4, 6):
+        raise ValueError(f"Invalid QSO time: {qso_time!r}")
+
+    if not band:
+        raise ValueError("QSO has no band")
+
+    mode, submode = normalize_mode(qso.get("mode"))
+
+    if not mode:
+        raise ValueError("QSO has no mode")
+
+    fields = [
+        adif_field("CALL", call),
+        adif_field("STATION_CALLSIGN", station_callsign.upper()),
+        adif_field("QSO_DATE", date),
+        adif_field("TIME_ON", qso_time),
+        adif_field("BAND", band),
+        adif_field("MODE", mode),
+    ]
+
+    if submode:
+        fields.append(adif_field("SUBMODE", submode))
+
+    freq = qso.get("freq")
+    if freq is not None:
+        try:
+            freq_hz = int(freq)
+            if freq_hz > 0:
+                freq_mhz = f"{freq_hz / 1_000_000:.6f}".rstrip("0").rstrip(".")
+                fields.append(adif_field("FREQ", freq_mhz))
+        except (TypeError, ValueError):
+            pass
+
+    rst_sent = qso.get("rstSent")
+    rst_rcvd = qso.get("rstRcvd")
+
+    if rst_sent:
+        fields.append(adif_field("RST_SENT", rst_sent))
+
+    if rst_rcvd:
+        fields.append(adif_field("RST_RCVD", rst_rcvd))
+
+    fields.append("<EOR>")
+
+    return "".join(fields)
+
+
+def submit_qrz(api_key, station_callsign, adif):
+    payload = urllib.parse.urlencode(
+        {
+            "KEY": api_key,
+            "ACTION": "INSERT",
+            "ADIF": adif,
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        QRZ_URL,
+        data=payload,
+        method="POST",
+        headers={
+            "User-Agent": f"wfweb-qrz-logger/1.0 ({station_callsign})",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+
+    with urllib.request.urlopen(req, timeout=15) as response:
+        body = response.read().decode("utf-8", errors="replace")
+
+    result = {}
+
+    for key, value in urllib.parse.parse_qsl(
+        body,
+        keep_blank_values=True
+    ):
+        result[key.upper()] = value
+
+    return result, body
+
+
+def read_state(path):
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def write_state(path, inode, offset):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+
+    data = {
+        "inode": inode,
+        "offset": offset,
+    }
+
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(data, f)
+        f.write("\n")
+
+    os.replace(tmp, path)
+
+
+def record_failure(path, qso, reason):
+    entry = {
+        "qso": qso,
+        "reason": reason,
+        "timestamp": int(time.time()),
+    }
+
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, separators=(",", ":")))
+        f.write("\n")
+
+
+def process_qso(args, qso):
+    adif = qso_to_adif(qso, args.station_callsign)
+
+    log(
+        f"QSO {qso.get('call', '?')} "
+        f"{qso.get('band', '?')} "
+        f"{qso.get('mode', '?')}"
+    )
+
+    verbose(args, f"ADIF: {adif}")
+
+    if args.dry_run:
+        log("DRY RUN: not submitting to QRZ")
+        return True
+
+    result, raw = submit_qrz(
+        args.api_key,
+        args.station_callsign,
+        adif,
+    )
+
+    verbose(args, f"QRZ response: {raw}")
+
+    status = result.get("RESULT", "").upper()
+
+    if status in ("OK", "REPLACE"):
+        logid = result.get("LOGID") or result.get("LOGIDS") or "unknown"
+        log(f"QRZ: {status}, LOGID={logid}")
+        return True
+
+    reason = result.get("REASON", raw)
+
+    log(f"QRZ rejected QSO: {reason}")
+
+    record_failure(
+        args.failed_file,
+        qso,
+        reason,
+    )
+
+    # We intentionally consider a QRZ-level rejection handled.
+    # It is preserved in the failed file rather than blocking
+    # every later QSO in the WFWEB log.
+    return True
+
+
+def follow(args):
+    log_path = args.log_file
+    state_path = args.state_file
+
+    state = read_state(state_path)
+
+    while True:
+        try:
+            stat = log_path.stat()
+        except FileNotFoundError:
+            verbose(args, f"Waiting for {log_path}")
+            time.sleep(2)
+            continue
+
+        inode = stat.st_ino
+
+        if args.dry_run:
+            if args.from_start:
+                offset = 0
+            else:
+                offset = stat.st_size
+
+        elif state.get("inode") == inode:
+            offset = int(state.get("offset", 0))
+
+            if offset > stat.st_size:
+                offset = 0
+        else:
+            if state:
+                # File was replaced/rotated.
+                offset = 0
+            elif args.from_start:
+                offset = 0
+            else:
+                # First ever run: ignore historical records.
+                offset = stat.st_size
+
+            write_state(state_path, inode, offset)
+
+        verbose(
+            args,
+            f"Watching {log_path} "
+            f"(inode={inode}, offset={offset})"
+        )
+
+        with log_path.open("r", encoding="utf-8") as f:
+            f.seek(offset)
+
+            while True:
+                line_offset = f.tell()
+                line = f.readline()
+
+                if line:
+                    next_offset = f.tell()
+
+                    try:
+                        qso = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        log(
+                            f"Invalid JSON at offset {line_offset}: {exc}"
+                        )
+
+                        if not args.dry_run:
+                            write_state(
+                                state_path,
+                                inode,
+                                next_offset,
+                            )
+
+                        continue
+
+                    try:
+                        handled = process_qso(args, qso)
+
+                    except (
+                        urllib.error.URLError,
+                        urllib.error.HTTPError,
+                        TimeoutError,
+                    ) as exc:
+                        log(f"QRZ/network error: {exc}")
+                        log("Will retry this QSO in 30 seconds.")
+                        f.seek(line_offset)
+                        time.sleep(30)
+                        continue
+
+                    except Exception as exc:
+                        log(f"QSO processing error: {exc}")
+
+                        if not args.dry_run:
+                            record_failure(
+                                args.failed_file,
+                                qso,
+                                str(exc),
+                            )
+
+                        handled = True
+
+                    if handled and not args.dry_run:
+                        write_state(
+                            state_path,
+                            inode,
+                            next_offset,
+                        )
+
+                    continue
+
+                time.sleep(1)
+
+                try:
+                    new_stat = log_path.stat()
+                except FileNotFoundError:
+                    break
+
+                if new_stat.st_ino != inode:
+                    verbose(args, "QSO log replaced; reopening.")
+                    state = read_state(state_path)
+                    break
+
+                if new_stat.st_size < f.tell():
+                    verbose(args, "QSO log truncated; reopening.")
+                    state = read_state(state_path)
+                    break
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Upload new WFWEB QSO log entries to QRZ.com"
+    )
+
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=DEFAULT_LOG,
+    )
+
+    parser.add_argument(
+        "--state-file",
+        type=Path,
+        default=DEFAULT_STATE,
+    )
+
+    parser.add_argument(
+        "--failed-file",
+        type=Path,
+        default=DEFAULT_FAILED,
+    )
+
+    parser.add_argument(
+        "--from-start",
+        action="store_true",
+        help="Process existing QSO records instead of starting at EOF",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show records and ADIF without sending anything to QRZ",
+    )
+
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("QRZ_API_KEY"),
+    )
+
+    parser.add_argument(
+        "--station-callsign",
+        default=os.environ.get(
+            "QRZ_STATION_CALLSIGN",
+            "KF0ZJT",
+        ),
+    )
+
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    if not args.dry_run and not args.api_key:
+        print(
+            "ERROR: QRZ API key not supplied.\n"
+            "Set QRZ_API_KEY or use --api-key.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        follow(args)
+    except KeyboardInterrupt:
+        log("Stopped.")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
