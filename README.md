@@ -1,1 +1,1 @@
-# wfweb_auto-logger
+# wfweb-auto-logger
