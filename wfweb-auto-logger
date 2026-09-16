@@ -313,6 +313,10 @@ def submit_wrl(args, qso, adif):
             request_id = error.get("requestId") or exc.headers.get("X-Request-Id")
             if request_id:
                 message += f" [requestId={request_id}]"
+            if (error.get("code") in ("INTERNAL_ERROR", "LOGBOOK_REQUIRED") and
+                    "destination logbook" in error.get("message", "").lower()):
+                message += ("; set --wrl-logbook-id/WRL_LOGBOOK_ID or choose a "
+                            "default under Integrations -> Developer API")
         except (AttributeError, json.JSONDecodeError):
             message = f"HTTP {exc.code}: {' '.join(body.split()) or exc.reason}"
         if exc.code == 429 or exc.code >= 500:

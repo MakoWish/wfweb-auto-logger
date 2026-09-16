@@ -169,7 +169,7 @@ class AutoLoggerTests(unittest.TestCase):
         args = SimpleNamespace(station_callsign="W1AW", wrl_api_key="wrl-key",
                                wrl_logbook_id=None, verbose=False)
         body = (b'{"data":null,"meta":null,"error":{"code":"INTERNAL_ERROR",'
-                b'"message":"An unexpected error occurred.",'
+                b'"message":"Could not determine the destination logbook.",'
                 b'"requestId":"379f8bce-f716-45d0-bbb8-c64193941183"}}')
         error = module.urllib.error.HTTPError(
             module.WRL_URL, 500, "Internal Server Error", {}, io.BytesIO(body)
@@ -177,7 +177,8 @@ class AutoLoggerTests(unittest.TestCase):
         with mock.patch.object(module.urllib.request, "urlopen", side_effect=error):
             with self.assertRaisesRegex(
                     module.TransientUploadError,
-                    "INTERNAL_ERROR.*379f8bce-f716-45d0-bbb8-c64193941183"):
+                    "INTERNAL_ERROR.*379f8bce-f716-45d0-bbb8-c64193941183.*"
+                    "--wrl-logbook-id"):
                 module.submit_wrl(args, {
                     "call": "W1AW", "date": "20260916", "time": "1435",
                     "freq": 14074000, "band": "20m", "mode": "FT8",
