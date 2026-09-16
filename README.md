@@ -1,5 +1,9 @@
 ![WFWEB Auto-Logger](docs/wfweb-auto-logger-banner.png)
 
+---
+
+## About
+
 `wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com and eQSL.cc are currently supported.
 
 ## Requirements
@@ -94,3 +98,7 @@ A dry run is a safe way to inspect generated ADIF:
 ```
 
 Dry runs never contact a service and never update the state or failure files.
+
+## Suggestions and Contributions
+
+If you have suggestions for this logger, or would like to make a contribution, please first open an issue to get the conversation started.
