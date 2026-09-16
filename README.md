@@ -110,6 +110,95 @@ With `--verbose`, the logger prints the contact JSON sent to World Radio League.
 
 Run `./wfweb-auto-logger --help` for the current defaults.
 
+## Run at system startup with systemd
+
+The repository includes a ready-to-install unit at
+[`systemd/wfweb-auto-logger.service`](systemd/wfweb-auto-logger.service). Keep
+the unit with the application source (rather than in `docs/`), then install it
+under `/etc/systemd/system`, where locally managed system units belong.
+
+Install the logger and unit:
+
+```console
+sudo install -m 0755 wfweb-auto-logger /usr/local/bin/wfweb-auto-logger
+sudo install -m 0644 systemd/wfweb-auto-logger.service \
+  /etc/systemd/system/wfweb-auto-logger.service
+```
+
+Create the configuration directory and `/etc/wfweb-auto-logger/config.env`:
+
+```console
+sudo install -d -m 0755 -o root -g root /etc/wfweb-auto-logger
+sudo touch /etc/wfweb-auto-logger/config.env
+sudo chown root:root /etc/wfweb-auto-logger/config.env
+sudo chmod 0600 /etc/wfweb-auto-logger/config.env
+sudoedit /etc/wfweb-auto-logger/config.env
+```
+
+Credentials alone do not enable a destination. The `--enable-*` options do not
+have direct environment-variable equivalents, so list every desired destination
+in `LOGGER_ARGS`. For example, this configuration enables all four services:
+
+```ini
+LOGGER_ARGS="--enable-qrz --enable-wrl --enable-eqsl --enable-hamqth"
+
+STATION_CALLSIGN="KF0ZJT"
+
+QRZ_API_KEY="your-qrz-key"
+
+WRL_API_KEY="wrl_live_your-key"
+# Optional when the WRL account has a default logbook:
+WRL_LOGBOOK_ID="00000000-0000-0000-0000-000000000000"
+
+EQSL_USERNAME="KF0ZJT"
+EQSL_PASSWORD="your-eqsl-password"
+# Optional:
+EQSL_QTH_NICKNAME="Home"
+
+HAMQTH_USERNAME="KF0ZJT"
+HAMQTH_PASSWORD="your-hamqth-password"
+```
+
+Remove an `--enable-*` option and its service-specific settings if that
+destination is not wanted. Keep the quotes around `LOGGER_ARGS` when it
+contains multiple options. After changing only `config.env`, restart the
+service with `sudo systemctl restart wfweb-auto-logger.service`; a
+`daemon-reload` is needed only after changing the unit itself.
+
+Load the unit and start it now and on future boots:
+
+```console
+sudo systemctl daemon-reload
+sudo systemctl enable --now wfweb-auto-logger.service
+```
+
+The root-owned `0600` configuration file is intentional. The systemd service
+manager reads `EnvironmentFile` before starting the process as `wfweb`, so the
+service account does not need permission to read the file directly. A `Failed
+to load environment files: No such file or directory` error means the file is
+not present at the path used by the installed unit, rather than that `wfweb`
+cannot read it. Confirm both the file and the installed unit with:
+
+```console
+sudo test -f /etc/wfweb-auto-logger/config.env && echo "config exists"
+sudo systemctl cat wfweb-auto-logger.service
+```
+
+If `systemctl cat` shows a different environment-file path, reinstall the unit
+using the commands above and run `sudo systemctl daemon-reload` before starting
+it again.
+
+The supplied unit runs as the existing `wfweb` user because the default QSO
+log and logger state live below `/var/lib/wfweb`. If WFWEB runs under a
+different account or the script is installed elsewhere, update `User`, `Group`,
+`HOME`, `ReadWritePaths`, or `ExecStart` in the installed unit as appropriate.
+Inspect startup and upload messages with:
+
+```console
+sudo systemctl status wfweb-auto-logger.service
+sudo journalctl -u wfweb-auto-logger.service -f
+```
+
 ## Delivery, retries, and failures
 
 Progress is tracked independently for each enabled service in the state file. A successful QRZ upload is therefore not repeated merely because the same eQSL upload encountered a temporary network error. Services with transient network errors retry after 30 seconds while successful services continue from their own saved position.

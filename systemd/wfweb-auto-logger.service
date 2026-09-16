@@ -1,0 +1,24 @@
+[Unit]
+Description=WFWEB automatic online logbook uploader
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=wfweb
+Group=wfweb
+Environment=HOME=/var/lib/wfweb
+EnvironmentFile=/etc/wfweb-auto-logger/config.env
+ExecStart=/usr/local/bin/wfweb-auto-logger $LOGGER_ARGS
+Restart=on-failure
+RestartSec=30s
+
+# Limit the service to the files and system resources it needs.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/wfweb
+
+[Install]
+WantedBy=multi-user.target
