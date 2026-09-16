@@ -137,6 +137,6 @@ A dry run is a safe way to inspect generated ADIF:
 
 Dry runs never contact a service and never update the state or failure files.
 
-## Suggestions and Contributions
+## Suggestions, Issues, or Contributions
 
 If you have suggestions for this logger, or would like to make a contribution, please first open an issue to get the conversation started.
