@@ -1,5 +1,6 @@
 import importlib.machinery
 import importlib.util
+import json
 import pathlib
 import tempfile
 import unittest
@@ -101,9 +102,28 @@ class AutoLoggerTests(unittest.TestCase):
     def test_configured_loggers_includes_additional_services(self):
         args = SimpleNamespace(enable_qrz=True, enable_eqsl=True,
                                enable_clublog=True, enable_hrdlog=True,
-                               enable_hamqth=True)
+                               enable_hamqth=True, enable_wrl=True)
         self.assertEqual(set(module.configured_loggers(args)),
-                         {"qrz", "eqsl", "clublog", "hrdlog", "hamqth"})
+                         {"qrz", "eqsl", "clublog", "hrdlog", "hamqth", "wrl"})
+
+    #===========================================================================
+    # Verify World Radio League receives JSON ADIF with bearer authentication
+    #===========================================================================
+    def test_wrl_request_contains_adif_and_api_key(self):
+        args = SimpleNamespace(station_callsign="W1AW", wrl_api_key="wrl-key")
+        response = mock.MagicMock()
+        response.read.return_value = b'{"id":"qso-123"}'
+        response.__enter__.return_value = response
+        with mock.patch.object(module.urllib.request, "urlopen",
+                               return_value=response) as open_url:
+            accepted, message = module.submit_wrl(args, "<CALL:6>KF0ZJT<EOR>")
+        request = open_url.call_args.args[0]
+        self.assertEqual(json.loads(request.data),
+                         {"adif": "<CALL:6>KF0ZJT<EOR>"})
+        self.assertEqual(request.get_header("Authorization"), "Bearer wrl-key")
+        self.assertEqual(request.get_header("Content-type"), "application/json")
+        self.assertTrue(accepted)
+        self.assertEqual(message, "qso-123")
 
     #===========================================================================
     # Verify network errors remain pending and are not recorded as rejections

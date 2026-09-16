@@ -22,6 +22,7 @@ EQSL_URL = "https://www.eqsl.cc/qslcard/ImportADIF.cfm"
 CLUBLOG_URL = "https://clublog.org/realtime.php"
 HRDLOG_URL = "https://robot.hrdlog.net/NewEntry.aspx"
 HAMQTH_URL = "https://www.hamqth.com/qso_realtime.php"
+WRL_URL = "https://api.worldradioleague.com/v1/qso"
 RETRY_SECONDS = 30
 
 
@@ -248,6 +249,34 @@ def submit_hamqth(args, adif):
 
 
 #===============================================================================
+# Submit one ADIF record to the World Radio League QSO API
+#===============================================================================
+def submit_wrl(args, adif):
+    payload = json.dumps({"adif": adif}).encode("utf-8")
+    request = urllib.request.Request(
+        WRL_URL, data=payload, method="POST",
+        headers={
+            "User-Agent": f"wfweb-auto-logger/2.0 ({args.station_callsign})",
+            "Authorization": f"Bearer {args.wrl_api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    message = " ".join(body.split())
+    if not message:
+        return True, "QSO accepted"
+    try:
+        result = json.loads(body)
+    except json.JSONDecodeError:
+        return True, message
+    if isinstance(result, dict):
+        message = str(result.get("message") or result.get("id") or message)
+    return True, message
+
+
+#===============================================================================
 # Read saved logger offsets, returning an empty state when none is usable
 #===============================================================================
 def read_state(path):
@@ -315,6 +344,8 @@ def configured_loggers(args):
         loggers["hrdlog"] = submit_hrdlog
     if args.enable_hamqth:
         loggers["hamqth"] = submit_hamqth
+    if args.enable_wrl:
+        loggers["wrl"] = submit_wrl
     return loggers
 
 
@@ -455,11 +486,13 @@ def parse_args(argv=None):
     parser.add_argument("--enable-hamqth", action="store_true")
     parser.add_argument("--hamqth-username", default=os.environ.get("HAMQTH_USERNAME"))
     parser.add_argument("--hamqth-password", default=os.environ.get("HAMQTH_PASSWORD"))
+    parser.add_argument("--enable-wrl", action="store_true")
+    parser.add_argument("--wrl-api-key", default=os.environ.get("WRL_API_KEY"))
     args = parser.parse_args(argv)
     # Report all configuration errors together so they can be fixed at once.
     errors = []
     enabled = (args.enable_qrz, args.enable_eqsl, args.enable_clublog,
-               args.enable_hrdlog, args.enable_hamqth)
+               args.enable_hrdlog, args.enable_hamqth, args.enable_wrl)
     if not any(enabled):
         errors.append("enable at least one logging service")
     if not args.station_callsign:
@@ -477,6 +510,8 @@ def parse_args(argv=None):
     if args.enable_hamqth and not all((args.hamqth_username,
                                       args.hamqth_password)):
         errors.append("--enable-hamqth requires username and password")
+    if args.enable_wrl and not args.wrl_api_key:
+        errors.append("--enable-wrl requires --wrl-api-key or WRL_API_KEY")
     if errors:
         parser.error("; ".join(errors))
     return args

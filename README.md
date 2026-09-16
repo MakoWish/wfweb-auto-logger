@@ -4,7 +4,7 @@
 
 ## About
 
-`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com, eQSL.cc, Club Log, HRDLog.net, and HamQTH are currently supported.
+`wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com, eQSL.cc, Club Log, HRDLog.net, HamQTH, and World Radio League are currently supported.
 
 ## Requirements
 
@@ -67,6 +67,10 @@ Enable HRDLog.net with `--enable-hrdlog`. Supply the upload code shown in the HR
 
 Enable HamQTH with `--enable-hamqth`. Supply the account username and password with `--hamqth-username` and `--hamqth-password`, or `HAMQTH_USERNAME` and `HAMQTH_PASSWORD`.
 
+### World Radio League
+
+Enable World Radio League with `--enable-wrl`. Supply a World Radio League API key with `--wrl-api-key` or `WRL_API_KEY`.
+
 ## Options
 
 | Option | Environment variable | Description |
@@ -87,6 +91,8 @@ Enable HamQTH with `--enable-hamqth`. Supply the account username and password w
 | `--enable-hamqth` | — | Upload to HamQTH |
 | `--hamqth-username NAME` | `HAMQTH_USERNAME` | HamQTH account username |
 | `--hamqth-password PASSWORD` | `HAMQTH_PASSWORD` | HamQTH account password |
+| `--enable-wrl` | — | Upload to World Radio League |
+| `--wrl-api-key KEY` | `WRL_API_KEY` | World Radio League API key |
 | `--log-file PATH` | — | WFWEB JSONL log path |
 | `--state-file PATH` | — | Upload progress state path |
 | `--failed-file PATH` | — | Rejected or invalid record output path |
