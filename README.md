@@ -1,5 +1,3 @@
-# WFWEB Auto-Logger
-
 ![WFWEB Auto-Logger](docs/wfweb-auto-logger-banner.png)
 
 `wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. QRZ.com and eQSL.cc are currently supported.
