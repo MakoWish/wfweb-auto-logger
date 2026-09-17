@@ -4,6 +4,8 @@
 
 ## About
 
+**_NOTE_**: This is just a test and should not be relied upon. Please use at your own risk, knowing that this might go away. The suggested changes to WFWEB's server-side logging are still being discussed. 
+
 `wfweb-auto-logger` watches WFWEB's JSON-lines QSO log and automatically uploads each new contact to every enabled online logbook. Integrations are available for QRZ.com, eQSL.cc, HamQTH, and World Radio League.
 
 ## Integration status
